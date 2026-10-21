@@ -23,6 +23,8 @@ function collectState() {
     absent: Array.from(S.absent.entries()),
     zones: S.zones,
     layout: S.layout,
+    scene: sceneId(),
+    layouts: S.layouts,
     font: S.font,
     namesOnly: S.namesOnly,
     showNumbers: S.showNumbers,
@@ -75,6 +77,9 @@ function loadState() {
       S.absent = new Map(d.absent || []);
       S.zones = d.zones || [];
       S.layout = d.layout || { rows: [10, 10], aisles: [] };
+      S.scene = SCENE_IDS.includes(d.scene) ? d.scene : 'theater';
+      S.layouts = d.layouts || defaultLayouts();
+      S.layouts.theater = S.layout;
       S.font = d.font || { zone: 0, unit: 0, name: 0 };
       S.namesOnly = !!d.namesOnly;
       S.showNumbers = d.showNumbers !== false;
@@ -93,6 +98,9 @@ function loadState() {
       S.units = d.seatUnits || [];
       S.absent = new Map(d.absentSeats || []);
       S.zones = (d.zones || []).map((z) => ({ ...z, showName: z.showName !== undefined ? z.showName : true }));
+      S.scene = 'theater';
+      S.layouts = defaultLayouts();
+      S.layouts.theater = S.layout;
       S.font = {
         zone: d.zoneNameFontOffset || 0,
         unit: d.unitFontOffset || 0,
@@ -128,6 +136,54 @@ function syncInputs() {
   $('meetingDate').value = S.meta.date || '';
   $('stageLabel').value = S.meta.stage || '主  席  台';
   $('fontPreset').value = S.meta.fontPreset || 'gongwen';
+  syncSceneUI();
+}
+
+/** 场景切换栏 + 场景参数面板的显隐与回填。 */
+function syncSceneUI() {
+  const id = sceneId();
+  document.querySelectorAll('[data-scene]').forEach((btn) => {
+    const on = btn.dataset.scene === id;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const theaterPanel = $('theaterPanel');
+  const longPanel = $('longTablePanel');
+  if (theaterPanel) theaterPanel.hidden = id !== 'theater';
+  if (longPanel) longPanel.hidden = id !== 'longTable';
+  if (longPanel && id === 'longTable') {
+    const c = S.layouts.longTable;
+    $('ltTop').value = c.top;
+    $('ltBottom').value = c.bottom;
+    $('ltLeft').value = c.left;
+    $('ltRight').value = c.right;
+  }
+  const axisBtn = $('axisBtn');
+  if (axisBtn) axisBtn.hidden = id !== 'theater';
+}
+
+/** 切换场景：保留名单/单位/缺席/团体，按人重映射座位。 */
+function switchScene(next) {
+  if (!SCENE_IDS.includes(next) || next === sceneId()) return;
+  pushHistory();
+  if (App.zoneMode) toggleZoneMode(false);
+  S.scene = next;
+  const res = remapSeatsForScene(next);
+  syncInputs();
+  render();
+  scheduleSave();
+  notify(`已切换到「${SCENE_LABELS[next]}」${res.unseated ? `，${res.unseated} 人未排座` : ''}。`);
+}
+
+/** 修改长桌参数：人数变化同样重排，避免截断丢人。 */
+function setLongTable(patch) {
+  pushHistory();
+  Object.assign(S.layouts.longTable, patch);
+  const res = remapSeatsForScene('longTable');
+  syncInputs();
+  render();
+  scheduleSave();
+  if (res.unseated) notify(`座位不够，${res.unseated} 人未排座。`);
 }
 
 /* ========== 提示 ========== */
@@ -368,21 +424,20 @@ function downloadBlob(content, filename, type) {
 
 function exportCSV() {
   const lines = ['座位号,排,姓名,单位,状态,团体'];
-  for (let r = 0; r < S.layout.rows.length; r++) {
-    const offset = rowStart(r);
-    for (let i = 0; i < S.layout.rows[r]; i++) {
-      const idx = offset + i;
+  sceneGroups().forEach((group) => {
+    for (let i = 0; i < group.count; i++) {
+      const idx = group.start + i;
       const m = seatModel(idx);
       lines.push([
         m.number,
-        r + 1,
+        group.label,
         m.hasPerson ? m.person : '',
         m.unitLines.join(' / '),
         m.hasPerson ? '就座' : '空位',
         zoneNamesAt(idx).join('、')
       ].map(csvCell).join(','));
     }
-  }
+  });
   if (S.absent.size) {
     Array.from(S.absent.entries())
       .sort((a, b) => a[1] - b[1])
@@ -398,11 +453,10 @@ function buildOrderText() {
     return S.seats.filter((p) => p != null).map((p) => S.people[p]).join('\n');
   }
   const lines = [];
-  for (let r = 0; r < S.layout.rows.length; r++) {
-    const offset = rowStart(r);
-    lines.push(`【第 ${r + 1} 排】`);
-    for (let i = 0; i < S.layout.rows[r]; i++) {
-      const idx = offset + i;
+  sceneGroups().forEach((group) => {
+    lines.push(`【${group.label}】`);
+    for (let i = 0; i < group.count; i++) {
+      const idx = group.start + i;
       const m = seatModel(idx);
       const tails = [];
       if (m.unitLines.length) tails.push(`[${m.unitLines.join(' / ')}]`);
@@ -411,7 +465,7 @@ function buildOrderText() {
       lines.push(`${m.number}号\t${m.hasPerson ? m.person : '（空）'}${tails.length ? '\t' + tails.join('\t') : ''}`);
     }
     lines.push('');
-  }
+  });
   if (S.absent.size) {
     lines.push('【缺席】');
     Array.from(S.absent.entries())
@@ -523,6 +577,31 @@ function bindEvents() {
     render();
     scheduleSave();
     notify(S.showAxis ? '中轴线已显示。' : '中轴线已隐藏，导出 PNG 同步不显示。');
+  });
+
+  /* --- 场景切换与长桌参数 --- */
+  document.querySelectorAll('[data-scene]').forEach((btn) => {
+    btn.addEventListener('click', () => switchScene(btn.dataset.scene));
+  });
+  [['ltTop', 'top'], ['ltBottom', 'bottom'], ['ltLeft', 'left'], ['ltRight', 'right']].forEach(([id, key]) => {
+    const input = $(id);
+    if (!input) return;
+    input.addEventListener('change', () => {
+      const value = clamp(parseInt(input.value, 10) || 0, 0, 14);
+      input.value = value;
+      setLongTable({ [key]: value });
+    });
+  });
+  document.querySelectorAll('[data-lt-preset]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const presets = {
+        u: { top: 0, bottom: 8, left: 6, right: 6 },
+        face: { top: 0, bottom: 0, left: 8, right: 8 },
+        ring: { top: 6, bottom: 6, left: 6, right: 6 }
+      };
+      const preset = presets[btn.dataset.ltPreset];
+      if (preset) setLongTable(preset);
+    });
   });
 
   /* --- 字号 --- */
@@ -686,8 +765,9 @@ function bindSeatMapEvents() {
       return;
     }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
       const rowEl = seatEl.closest('.row');
+      if (!rowEl) return;
+      e.preventDefault();
       const rowIdx = Number(rowEl.dataset.row);
       const targetRow = rowsEl.querySelector(`.row[data-row="${rowIdx + (e.key === 'ArrowDown' ? 1 : -1)}"]`);
       if (!targetRow) return;

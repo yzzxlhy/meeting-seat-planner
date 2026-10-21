@@ -26,16 +26,35 @@
         <h2>规模与人员</h2>
       </div>
 
-      <div class="field">
-        <label for="rowSeats">每排座位数</label>
-        <input id="rowSeats" type="text" inputmode="numeric" value="10,10" autocomplete="off">
-        <div class="field-note">逗号分隔，如 <code>10,10</code> 表示两排各 10 座。</div>
+      <div id="theaterPanel">
+        <div class="field">
+          <label for="rowSeats">每排座位数</label>
+          <input id="rowSeats" type="text" inputmode="numeric" value="10,10" autocomplete="off">
+          <div class="field-note">逗号分隔，如 <code>10,10</code> 表示两排各 10 座。</div>
+        </div>
+
+        <div class="field">
+          <label for="aisles">过道位置</label>
+          <input id="aisles" type="text" inputmode="numeric" value="" autocomplete="off" placeholder="留空表示无过道">
+          <div class="field-note">按每排座位序号填写，如 <code>5</code> 表示第 5 座后有一条过道。</div>
+        </div>
       </div>
 
-      <div class="field">
-        <label for="aisles">过道位置</label>
-        <input id="aisles" type="text" inputmode="numeric" value="" autocomplete="off" placeholder="留空表示无过道">
-        <div class="field-note">按每排座位序号填写，如 <code>5</code> 表示第 5 座后有一条过道。</div>
+      <div id="longTablePanel" hidden>
+        <div class="field">
+          <label>四条边各坐几人（0 = 不坐人）</label>
+          <div class="side-grid">
+            <label class="side-field"><span>上边</span><input id="ltTop" type="number" min="0" max="14" value="0" inputmode="numeric"></label>
+            <label class="side-field"><span>下边</span><input id="ltBottom" type="number" min="0" max="14" value="8" inputmode="numeric"></label>
+            <label class="side-field"><span>左边</span><input id="ltLeft" type="number" min="0" max="14" value="6" inputmode="numeric"></label>
+            <label class="side-field"><span>右边</span><input id="ltRight" type="number" min="0" max="14" value="6" inputmode="numeric"></label>
+          </div>
+        </div>
+        <div class="btn-row" style="gap:6px">
+          <button class="btn btn--ghost" type="button" data-lt-preset="u">U 型</button>
+          <button class="btn btn--ghost" type="button" data-lt-preset="face">对坐</button>
+          <button class="btn btn--ghost" type="button" data-lt-preset="ring">回字</button>
+        </div>
       </div>
 
       <div class="field">
@@ -148,6 +167,12 @@
           <button class="btn btn--primary" id="zoneConfirmBtn" type="button">完成</button>
           <button class="btn btn--ghost" id="zoneCancelBtn" type="button">取消</button>
         </div>
+      </div>
+
+      <div class="scene-bar no-print" role="group" aria-label="场景">
+        <span class="scene-label">场景</span>
+        <button class="seg is-active" type="button" data-scene="theater" aria-pressed="true">剧院式</button>
+        <button class="seg" type="button" data-scene="longTable" aria-pressed="false">长桌（U 型 / 对坐）</button>
       </div>
 
       <div class="btn-row no-print" style="margin-bottom:10px">

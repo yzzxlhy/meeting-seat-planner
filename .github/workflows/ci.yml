@@ -45,6 +45,9 @@ jobs:
       - name: 字体方案与 PNG 刊头
         run: python test_fonts.py
 
+      - name: 场景与长桌
+        run: python test_scenes.py
+
       - name: 上传失败截图
         if: failure()
         uses: actions/upload-artifact@v4

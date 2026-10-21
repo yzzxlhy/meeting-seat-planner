@@ -52,13 +52,23 @@ def main() -> None:
             page.click("#pngBtn")
         (SHOTS / "export-png.png").write_bytes(Path(dl.value.path()).read_bytes())
 
+        # 长桌场景：U 型预设
+        page.click('[data-scene="longTable"]')
+        page.wait_for_timeout(350)
+        page.screenshot(path=str(SHOTS / "long-table.png"), full_page=True)
+        with page.expect_download() as dl2:
+            page.click("#pngBtn")
+        (SHOTS / "long-table-export.png").write_bytes(Path(dl2.value.path()).read_bytes())
+        page.click('[data-scene="theater"]')
+        page.wait_for_timeout(250)
+
         page.set_viewport_size({"width": 390, "height": 844})
         page.wait_for_timeout(300)
         page.screenshot(path=str(SHOTS / "mobile.png"), full_page=True)
 
         browser.close()
 
-    for f in ("desktop.png", "export-png.png", "mobile.png"):
+    for f in ("desktop.png", "export-png.png", "long-table.png", "long-table-export.png", "mobile.png"):
         print(f"{f:16s} {((SHOTS / f).stat().st_size / 1024):.0f} KB")
 
 

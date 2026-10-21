@@ -976,3 +976,74 @@ textarea#people { height: 150px; font-family: var(--font-body); }
 
   .title-block { border-color: #000; }
 }
+
+/* ========== 16. 场景切换与长桌图 ========== */
+
+.scene-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  flex-wrap: wrap;
+}
+
+.scene-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.seg {
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.seg:hover { color: var(--ink); border-color: var(--ink); }
+.seg.is-active { color: var(--paper); background: var(--ink); border-color: var(--ink); }
+
+.side-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.side-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.side-field input {
+  width: 58px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+}
+
+/* 绝对坐标场景（长桌等） */
+.rows--scene { margin: 0 auto; }
+
+.scene { position: relative; }
+
+.table-shape {
+  position: absolute;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-strong);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.seat--abs { position: absolute; margin: 0; }

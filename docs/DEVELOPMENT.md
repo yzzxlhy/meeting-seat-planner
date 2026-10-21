@@ -37,6 +37,7 @@
 │   ├── index.html      # 模板（含 /*__CSS__*/ 与 /*__JS__*/ 占位符）
 │   ├── styles.css      # 设计令牌 + 组件样式 + 响应式 + 打印样式
 │   ├── state.js        # 数据模型、排座规则、文本排版引擎（纯函数，无 DOM 查询）
+│   ├── scenes.js       # 场景几何：长桌等绝对坐标排布（DOM / Canvas 共用）
 │   ├── view.js         # 渲染层：DOM 构造、行内编辑器、Canvas 导出
 │   └── main.js         # 交互层：事件、动作、存档、导出
 ├── build.py            # 内联打包 → dist/会议辅助.html + docs/index.html
@@ -49,6 +50,7 @@
 ├── test_features.py    # 功能回归清单
 ├── test_migration.py   # 旧版存档迁移
 ├── test_fonts.py       # 字体方案与 PNG 刊头
+├── test_scenes.py      # 场景切换与长桌几何
 ├── audit_layout.py     # 几何排版审计（溢出 / 中轴对位 / 移动端）
 ├── check_contrast.py   # WCAG 对比度体检（读运行时令牌）
 ├── inspect_png.py      # 导出 PNG 的像素体检
@@ -64,7 +66,7 @@ python build.py          # 产物 dist/会议辅助.html（docs/ 存在时同步
 运行全部校验：
 
 ```bash
-python test_ui.py && python test_features.py && python test_migration.py && python test_fonts.py
+python test_ui.py && python test_features.py && python test_migration.py && python test_fonts.py && python test_scenes.py
 python audit_layout.py && python check_contrast.py && python inspect_png.py
 ```
 
@@ -176,3 +178,11 @@ v1 是 DOM 用字符宽度估算、Canvas 用 `measureText` 各算一遍。
 - 团长名多行：最多 3 行，Enter 换行；团名块占剩余高度并垂直居中。
 - 单位多行：最多 3 行，宽度优先收缩，最低 4px；排版固定为「单位在上、姓名在下」
   （单位通常比姓名长，放上面不挤名字），DOM 与 Canvas 同一顺序。
+
+### 3.9 场景框架与长桌（本轮）
+
+- 新增 `S.scene` 与 `S.layouts`：每个场景独立存参数，`S.layout` 仍指向剧院式以兼容旧代码。
+- `sceneSeatCount()` / `sceneGroups()` 成为座位总数与分组的唯一来源，座次表、CSV、TXT 全部改读它。
+- 切场景时 `remapSeatsForScene()` 按「人 → 座位」重映射：单位跟人走、缺席与团体按人重算，座位不够则留作未排座。
+- 剧院式仍走行式 DOM（`.row` / 空隙 / 过道），长桌走 `scenes.js` 的绝对坐标；两条路径共享 `buildSeat()` 与 `paintSeatCard()`。
+- 长桌四边计数决定桌板形状：仅左右/仅上下 → 一整张桌；其余按有人的边画分段桌板，自然形成 U 型 / 回字。

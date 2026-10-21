@@ -17,7 +17,7 @@ SRC = BASE / "src"
 DIST = BASE / "dist"
 PAGES = BASE / "docs"
 
-JS_PARTS = ("state.js", "view.js", "main.js")
+JS_PARTS = ("state.js", "scenes.js", "view.js", "main.js")
 CSS_PART = "styles.css"
 HTML_PART = "index.html"
 OUTPUT_NAME = "会议辅助.html"

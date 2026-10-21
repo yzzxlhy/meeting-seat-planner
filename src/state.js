@@ -49,6 +49,28 @@ const FONT_OFFSET_MAX = 4;
 const UNIT_MAX_LINES = 3;
 const ZONE_NAME_MAX_LINES = 3;
 const HISTORY_LIMIT = 50;
+
+/* ========== 场景 ========== */
+
+/** 场景 id。theater 为默认，其余为绝对坐标场景。 */
+const SCENE_IDS = Object.freeze(['theater', 'longTable', 'round', 'photo']);
+
+const SCENE_LABELS = Object.freeze({
+  theater: '剧院式',
+  longTable: '长桌',
+  round: '圆桌',
+  photo: '合影'
+});
+
+/** 各场景的默认参数。深拷贝后再放进 state，避免共享引用。 */
+function defaultLayouts() {
+  return {
+    theater: { rows: [10, 10], aisles: [] },
+    longTable: { top: 0, bottom: 8, left: 6, right: 6 },
+    round: { tables: 2, perTable: 10 },
+    photo: { rows: 3, perRow: [6, 7, 7] }
+  };
+}
 const STORAGE_KEY = 'meeting-seat-v30';
 const LEGACY_STORAGE_KEYS = ['seating-tool-state-v28'];
 
@@ -259,7 +281,9 @@ const App = {
     units: [],
     absent: new Map(),
     zones: [],
+    scene: 'theater',
     layout: { rows: [10, 10], aisles: [] },
+    layouts: defaultLayouts(),
     font: { zone: 0, unit: 0, name: 0 },
     namesOnly: false,
     /** 座位左上角座号是否显示（影响屏幕 / 打印 / PNG 三个出口） */
@@ -277,6 +301,80 @@ const App = {
 };
 
 const S = App.state;
+/* S.layout 保留为剧院式的快捷引用：旧代码与旧存档都按这个结构读写。 */
+S.layout = S.layouts.theater;
+
+/* ========== 场景辅助 ========== */
+
+function sceneId() {
+  return SCENE_IDS.includes(S.scene) ? S.scene : 'theater';
+}
+
+function sceneCfg(id) {
+  return S.layouts[id || sceneId()] || {};
+}
+
+/** 场景座位总数（与座位数组长度对齐）。 */
+function sceneSeatCount(id, cfg) {
+  const key = id || sceneId();
+  const c = cfg || sceneCfg(key);
+  if (key === 'theater') return (c.rows || []).reduce((a, b) => a + b, 0);
+  if (key === 'longTable') return (c.top || 0) + (c.bottom || 0) + (c.left || 0) + (c.right || 0);
+  if (key === 'round') return (c.tables || 0) * (c.perTable || 0);
+  if (key === 'photo') return (c.perRow || []).reduce((a, b) => a + b, 0);
+  return 0;
+}
+
+/**
+ * 场景分组：座次表 / CSV / 文本导出按分组列小标题。
+ * 顺序必须与 scenes.js 中座位索引顺序一致。
+ */
+function sceneGroups() {
+  const id = sceneId();
+  const c = sceneCfg(id);
+  const out = [];
+  let start = 0;
+  const push = (label, count) => {
+    if (!count) return;
+    out.push({ label, start, count });
+    start += count;
+  };
+
+  if (id === 'theater') {
+    (c.rows || []).forEach((n, i) => push(`第 ${i + 1} 排`, n));
+  } else if (id === 'longTable') {
+    push('下边', c.bottom);
+    push('右边', c.right);
+    push('上边', c.top);
+    push('左边', c.left);
+  } else if (id === 'round') {
+    for (let i = 0; i < (c.tables || 0); i++) push(`第 ${i + 1} 桌`, c.perTable || 0);
+  } else if (id === 'photo') {
+    (c.perRow || []).forEach((n, i) => push(`第 ${i + 1} 排`, n));
+  }
+  return out;
+}
+
+/** 标题栏「席位构成」的一行描述。 */
+function sceneSummary() {
+  const id = sceneId();
+  const c = sceneCfg(id);
+  if (id === 'theater') return (c.rows || []).join(' + ');
+  if (id === 'longTable') {
+    return [
+      ['下', c.bottom],
+      ['右', c.right],
+      ['上', c.top],
+      ['左', c.left]
+    ]
+      .filter(([, n]) => n > 0)
+      .map(([k, n]) => `${k} ${n}`)
+      .join(' · ');
+  }
+  if (id === 'round') return `${c.tables} 桌 × ${c.perTable} 人`;
+  if (id === 'photo') return `${(c.perRow || []).length} 排（${(c.perRow || []).join(' / ')}）`;
+  return '';
+}
 
 function seatCount() {
   return S.seats.length;
@@ -321,6 +419,8 @@ function snapshot() {
     absent: Array.from(S.absent.entries()),
     zones: S.zones,
     layout: S.layout,
+    scene: sceneId(),
+    layouts: S.layouts,
     font: S.font,
     namesOnly: S.namesOnly,
     showNumbers: S.showNumbers,
@@ -342,6 +442,9 @@ function restoreSnapshot(raw) {
   S.absent = new Map(d.absent || []);
   S.zones = d.zones || [];
   S.layout = d.layout || { rows: [10, 10], aisles: [] };
+  S.scene = SCENE_IDS.includes(d.scene) ? d.scene : 'theater';
+  S.layouts = d.layouts || { ...defaultLayouts(), theater: S.layout };
+  S.layouts.theater = S.layout;
   S.font = d.font || { zone: 0, unit: 0, name: 0 };
   S.namesOnly = !!d.namesOnly;
   /* 旧快照没有该字段：缺省视为显示座号 */
@@ -363,7 +466,7 @@ function undo() {
  * 返回是否发生了结构性变化。
  */
 function syncSeatArrays() {
-  const total = S.layout.rows.reduce((a, b) => a + b, 0);
+  const total = sceneSeatCount();
   if (total === S.seats.length) return false;
 
   const seats = new Array(total).fill(null);
@@ -486,7 +589,7 @@ function stats() {
 
 function resetSeating(peopleText, opt) {
   const people = parsePeople(peopleText);
-  const total = S.layout.rows.reduce((a, b) => a + b, 0);
+  const total = sceneSeatCount();
   S.people = people;
   S.seats = new Array(total).fill(null);
   S.units = new Array(total).fill('');
@@ -494,6 +597,74 @@ function resetSeating(peopleText, opt) {
   if (opt && opt.clearZones) S.zones = [];
   for (let i = 0; i < Math.min(people.length, total); i++) S.seats[i] = i;
   App.history = [];
+}
+
+/**
+ * 切场景时重排座位：人员顺序不变，单位跟着人走，缺席与团体按人重映射。
+ * 新场景座位不够时，多出的人留作未排座（仍在名单里）。
+ */
+function remapSeatsForScene(nextScene) {
+  const nameAt = (i) => (S.seats[i] == null ? null : S.people[S.seats[i]]);
+  const absentAt = new Map();
+  for (const [person, seat] of S.absent) absentAt.set(seat, person);
+
+  const entries = [];
+  const seen = new Set();
+  for (let i = 0; i < S.seats.length; i++) {
+    const name = nameAt(i);
+    if (name != null && !seen.has(name)) {
+      entries.push({ name, unit: S.units[i] || '', absent: false });
+      seen.add(name);
+    } else if (absentAt.has(i)) {
+      const abs = absentAt.get(i);
+      if (!seen.has(abs)) {
+        entries.push({ name: abs, unit: '', absent: true });
+        seen.add(abs);
+      }
+    }
+  }
+  S.people.forEach((name) => {
+    if (!seen.has(name)) {
+      entries.push({ name, unit: '', absent: false });
+      seen.add(name);
+    }
+  });
+
+  const total = sceneSeatCount(nextScene, S.layouts[nextScene]);
+  const people = entries.map((e) => e.name);
+  const indexOf = new Map(people.map((name, i) => [name, i]));
+  const seats = new Array(total).fill(null);
+  const units = new Array(total).fill('');
+  const absent = new Map();
+  const seatOf = new Map();
+
+  let cursor = 0;
+  entries.forEach((e) => {
+    if (cursor >= total) return;
+    seatOf.set(e.name, cursor);
+    if (e.absent) absent.set(e.name, cursor);
+    else seats[cursor] = indexOf.get(e.name);
+    if (e.unit) units[cursor] = e.unit;
+    cursor++;
+  });
+
+  const zones = S.zones
+    .map((z) => ({
+      ...z,
+      seats: z.seats
+        .map((i) => nameAt(i))
+        .filter((name) => name != null)
+        .map((name) => seatOf.get(name))
+        .filter((i) => i != null)
+    }))
+    .filter((z) => z.seats.length > 0);
+
+  S.people = people;
+  S.seats = seats;
+  S.units = units;
+  S.absent = absent;
+  S.zones = zones;
+  return { unseated: Math.max(0, people.length - total) };
 }
 
 /**

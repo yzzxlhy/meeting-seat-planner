@@ -985,6 +985,77 @@ textarea#people { height: 150px; font-family: var(--font-body); }
   .title-block { border-color: #000; }
 }
 
+/* ========== 16. 场景切换与长桌图 ========== */
+
+.scene-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  flex-wrap: wrap;
+}
+
+.scene-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.seg {
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.seg:hover { color: var(--ink); border-color: var(--ink); }
+.seg.is-active { color: var(--paper); background: var(--ink); border-color: var(--ink); }
+
+.side-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.side-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.side-field input {
+  width: 58px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+}
+
+/* 绝对坐标场景（长桌等） */
+.rows--scene { margin: 0 auto; }
+
+.scene { position: relative; }
+
+.table-shape {
+  position: absolute;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-strong);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.seat--abs { position: absolute; margin: 0; }
+
 </style>
 </head>
 <body>
@@ -1004,16 +1075,35 @@ textarea#people { height: 150px; font-family: var(--font-body); }
         <h2>规模与人员</h2>
       </div>
 
-      <div class="field">
-        <label for="rowSeats">每排座位数</label>
-        <input id="rowSeats" type="text" inputmode="numeric" value="10,10" autocomplete="off">
-        <div class="field-note">逗号分隔，如 <code>10,10</code> 表示两排各 10 座。</div>
+      <div id="theaterPanel">
+        <div class="field">
+          <label for="rowSeats">每排座位数</label>
+          <input id="rowSeats" type="text" inputmode="numeric" value="10,10" autocomplete="off">
+          <div class="field-note">逗号分隔，如 <code>10,10</code> 表示两排各 10 座。</div>
+        </div>
+
+        <div class="field">
+          <label for="aisles">过道位置</label>
+          <input id="aisles" type="text" inputmode="numeric" value="" autocomplete="off" placeholder="留空表示无过道">
+          <div class="field-note">按每排座位序号填写，如 <code>5</code> 表示第 5 座后有一条过道。</div>
+        </div>
       </div>
 
-      <div class="field">
-        <label for="aisles">过道位置</label>
-        <input id="aisles" type="text" inputmode="numeric" value="" autocomplete="off" placeholder="留空表示无过道">
-        <div class="field-note">按每排座位序号填写，如 <code>5</code> 表示第 5 座后有一条过道。</div>
+      <div id="longTablePanel" hidden>
+        <div class="field">
+          <label>四条边各坐几人（0 = 不坐人）</label>
+          <div class="side-grid">
+            <label class="side-field"><span>上边</span><input id="ltTop" type="number" min="0" max="14" value="0" inputmode="numeric"></label>
+            <label class="side-field"><span>下边</span><input id="ltBottom" type="number" min="0" max="14" value="8" inputmode="numeric"></label>
+            <label class="side-field"><span>左边</span><input id="ltLeft" type="number" min="0" max="14" value="6" inputmode="numeric"></label>
+            <label class="side-field"><span>右边</span><input id="ltRight" type="number" min="0" max="14" value="6" inputmode="numeric"></label>
+          </div>
+        </div>
+        <div class="btn-row" style="gap:6px">
+          <button class="btn btn--ghost" type="button" data-lt-preset="u">U 型</button>
+          <button class="btn btn--ghost" type="button" data-lt-preset="face">对坐</button>
+          <button class="btn btn--ghost" type="button" data-lt-preset="ring">回字</button>
+        </div>
       </div>
 
       <div class="field">
@@ -1126,6 +1216,12 @@ textarea#people { height: 150px; font-family: var(--font-body); }
           <button class="btn btn--primary" id="zoneConfirmBtn" type="button">完成</button>
           <button class="btn btn--ghost" id="zoneCancelBtn" type="button">取消</button>
         </div>
+      </div>
+
+      <div class="scene-bar no-print" role="group" aria-label="场景">
+        <span class="scene-label">场景</span>
+        <button class="seg is-active" type="button" data-scene="theater" aria-pressed="true">剧院式</button>
+        <button class="seg" type="button" data-scene="longTable" aria-pressed="false">长桌（U 型 / 对坐）</button>
       </div>
 
       <div class="btn-row no-print" style="margin-bottom:10px">
@@ -1294,6 +1390,28 @@ const FONT_OFFSET_MAX = 4;
 const UNIT_MAX_LINES = 3;
 const ZONE_NAME_MAX_LINES = 3;
 const HISTORY_LIMIT = 50;
+
+/* ========== 场景 ========== */
+
+/** 场景 id。theater 为默认，其余为绝对坐标场景。 */
+const SCENE_IDS = Object.freeze(['theater', 'longTable', 'round', 'photo']);
+
+const SCENE_LABELS = Object.freeze({
+  theater: '剧院式',
+  longTable: '长桌',
+  round: '圆桌',
+  photo: '合影'
+});
+
+/** 各场景的默认参数。深拷贝后再放进 state，避免共享引用。 */
+function defaultLayouts() {
+  return {
+    theater: { rows: [10, 10], aisles: [] },
+    longTable: { top: 0, bottom: 8, left: 6, right: 6 },
+    round: { tables: 2, perTable: 10 },
+    photo: { rows: 3, perRow: [6, 7, 7] }
+  };
+}
 const STORAGE_KEY = 'meeting-seat-v30';
 const LEGACY_STORAGE_KEYS = ['seating-tool-state-v28'];
 
@@ -1504,7 +1622,9 @@ const App = {
     units: [],
     absent: new Map(),
     zones: [],
+    scene: 'theater',
     layout: { rows: [10, 10], aisles: [] },
+    layouts: defaultLayouts(),
     font: { zone: 0, unit: 0, name: 0 },
     namesOnly: false,
     /** 座位左上角座号是否显示（影响屏幕 / 打印 / PNG 三个出口） */
@@ -1522,6 +1642,80 @@ const App = {
 };
 
 const S = App.state;
+/* S.layout 保留为剧院式的快捷引用：旧代码与旧存档都按这个结构读写。 */
+S.layout = S.layouts.theater;
+
+/* ========== 场景辅助 ========== */
+
+function sceneId() {
+  return SCENE_IDS.includes(S.scene) ? S.scene : 'theater';
+}
+
+function sceneCfg(id) {
+  return S.layouts[id || sceneId()] || {};
+}
+
+/** 场景座位总数（与座位数组长度对齐）。 */
+function sceneSeatCount(id, cfg) {
+  const key = id || sceneId();
+  const c = cfg || sceneCfg(key);
+  if (key === 'theater') return (c.rows || []).reduce((a, b) => a + b, 0);
+  if (key === 'longTable') return (c.top || 0) + (c.bottom || 0) + (c.left || 0) + (c.right || 0);
+  if (key === 'round') return (c.tables || 0) * (c.perTable || 0);
+  if (key === 'photo') return (c.perRow || []).reduce((a, b) => a + b, 0);
+  return 0;
+}
+
+/**
+ * 场景分组：座次表 / CSV / 文本导出按分组列小标题。
+ * 顺序必须与 scenes.js 中座位索引顺序一致。
+ */
+function sceneGroups() {
+  const id = sceneId();
+  const c = sceneCfg(id);
+  const out = [];
+  let start = 0;
+  const push = (label, count) => {
+    if (!count) return;
+    out.push({ label, start, count });
+    start += count;
+  };
+
+  if (id === 'theater') {
+    (c.rows || []).forEach((n, i) => push(`第 ${i + 1} 排`, n));
+  } else if (id === 'longTable') {
+    push('下边', c.bottom);
+    push('右边', c.right);
+    push('上边', c.top);
+    push('左边', c.left);
+  } else if (id === 'round') {
+    for (let i = 0; i < (c.tables || 0); i++) push(`第 ${i + 1} 桌`, c.perTable || 0);
+  } else if (id === 'photo') {
+    (c.perRow || []).forEach((n, i) => push(`第 ${i + 1} 排`, n));
+  }
+  return out;
+}
+
+/** 标题栏「席位构成」的一行描述。 */
+function sceneSummary() {
+  const id = sceneId();
+  const c = sceneCfg(id);
+  if (id === 'theater') return (c.rows || []).join(' + ');
+  if (id === 'longTable') {
+    return [
+      ['下', c.bottom],
+      ['右', c.right],
+      ['上', c.top],
+      ['左', c.left]
+    ]
+      .filter(([, n]) => n > 0)
+      .map(([k, n]) => `${k} ${n}`)
+      .join(' · ');
+  }
+  if (id === 'round') return `${c.tables} 桌 × ${c.perTable} 人`;
+  if (id === 'photo') return `${(c.perRow || []).length} 排（${(c.perRow || []).join(' / ')}）`;
+  return '';
+}
 
 function seatCount() {
   return S.seats.length;
@@ -1566,6 +1760,8 @@ function snapshot() {
     absent: Array.from(S.absent.entries()),
     zones: S.zones,
     layout: S.layout,
+    scene: sceneId(),
+    layouts: S.layouts,
     font: S.font,
     namesOnly: S.namesOnly,
     showNumbers: S.showNumbers,
@@ -1587,6 +1783,9 @@ function restoreSnapshot(raw) {
   S.absent = new Map(d.absent || []);
   S.zones = d.zones || [];
   S.layout = d.layout || { rows: [10, 10], aisles: [] };
+  S.scene = SCENE_IDS.includes(d.scene) ? d.scene : 'theater';
+  S.layouts = d.layouts || { ...defaultLayouts(), theater: S.layout };
+  S.layouts.theater = S.layout;
   S.font = d.font || { zone: 0, unit: 0, name: 0 };
   S.namesOnly = !!d.namesOnly;
   /* 旧快照没有该字段：缺省视为显示座号 */
@@ -1608,7 +1807,7 @@ function undo() {
  * 返回是否发生了结构性变化。
  */
 function syncSeatArrays() {
-  const total = S.layout.rows.reduce((a, b) => a + b, 0);
+  const total = sceneSeatCount();
   if (total === S.seats.length) return false;
 
   const seats = new Array(total).fill(null);
@@ -1731,7 +1930,7 @@ function stats() {
 
 function resetSeating(peopleText, opt) {
   const people = parsePeople(peopleText);
-  const total = S.layout.rows.reduce((a, b) => a + b, 0);
+  const total = sceneSeatCount();
   S.people = people;
   S.seats = new Array(total).fill(null);
   S.units = new Array(total).fill('');
@@ -1739,6 +1938,74 @@ function resetSeating(peopleText, opt) {
   if (opt && opt.clearZones) S.zones = [];
   for (let i = 0; i < Math.min(people.length, total); i++) S.seats[i] = i;
   App.history = [];
+}
+
+/**
+ * 切场景时重排座位：人员顺序不变，单位跟着人走，缺席与团体按人重映射。
+ * 新场景座位不够时，多出的人留作未排座（仍在名单里）。
+ */
+function remapSeatsForScene(nextScene) {
+  const nameAt = (i) => (S.seats[i] == null ? null : S.people[S.seats[i]]);
+  const absentAt = new Map();
+  for (const [person, seat] of S.absent) absentAt.set(seat, person);
+
+  const entries = [];
+  const seen = new Set();
+  for (let i = 0; i < S.seats.length; i++) {
+    const name = nameAt(i);
+    if (name != null && !seen.has(name)) {
+      entries.push({ name, unit: S.units[i] || '', absent: false });
+      seen.add(name);
+    } else if (absentAt.has(i)) {
+      const abs = absentAt.get(i);
+      if (!seen.has(abs)) {
+        entries.push({ name: abs, unit: '', absent: true });
+        seen.add(abs);
+      }
+    }
+  }
+  S.people.forEach((name) => {
+    if (!seen.has(name)) {
+      entries.push({ name, unit: '', absent: false });
+      seen.add(name);
+    }
+  });
+
+  const total = sceneSeatCount(nextScene, S.layouts[nextScene]);
+  const people = entries.map((e) => e.name);
+  const indexOf = new Map(people.map((name, i) => [name, i]));
+  const seats = new Array(total).fill(null);
+  const units = new Array(total).fill('');
+  const absent = new Map();
+  const seatOf = new Map();
+
+  let cursor = 0;
+  entries.forEach((e) => {
+    if (cursor >= total) return;
+    seatOf.set(e.name, cursor);
+    if (e.absent) absent.set(e.name, cursor);
+    else seats[cursor] = indexOf.get(e.name);
+    if (e.unit) units[cursor] = e.unit;
+    cursor++;
+  });
+
+  const zones = S.zones
+    .map((z) => ({
+      ...z,
+      seats: z.seats
+        .map((i) => nameAt(i))
+        .filter((name) => name != null)
+        .map((name) => seatOf.get(name))
+        .filter((i) => i != null)
+    }))
+    .filter((z) => z.seats.length > 0);
+
+  S.people = people;
+  S.seats = seats;
+  S.units = units;
+  S.absent = absent;
+  S.zones = zones;
+  return { unseated: Math.max(0, people.length - total) };
 }
 
 /**
@@ -1894,6 +2161,94 @@ function renamePerson(personIdx, name) {
   if (!trimmed || S.people[personIdx] === trimmed) return false;
   S.people[personIdx] = trimmed;
   return true;
+}
+
+
+/**
+ * scenes.js — 场景几何
+ *
+ * 剧院式沿用行式 DOM（.row / 空隙 / 过道）；其余场景由本文件算出绝对坐标，
+ * DOM 与 Canvas 共用同一份坐标，避免屏幕与导出漂移。
+ *
+ * 约定：每个场景返回
+ *   { w, h, seats:[{idx,x,y}], decor:[{type,x,y,w,h,r}] }
+ * 其中 seats 的顺序必须与 state.js 的 sceneGroups() 完全一致。
+ */
+
+'use strict';
+
+/** 长桌围合的桌板厚度与座位留缝（px）。 */
+const TABLE_T = 56;
+const TABLE_GAP = 10;
+const SCENE_PAD = 20;
+
+/**
+ * 长桌：四条边各自可坐人，0 表示该边不坐人。
+ * 空出的边不画桌板，因此「下 + 左 + 右」自然形成 U 形。
+ */
+function longTableGeometry(cfg) {
+  const b = cfg.bottom;
+  const r = cfg.right;
+  const t = cfg.top;
+  const l = cfg.left;
+
+  const seatW = GEO.seatW;
+  const seatH = GEO.seatH;
+
+  const tableW = Math.max(3, b, t) * (seatW + 8);
+  const tableH = Math.max(2, l, r) * (seatH + 8);
+
+  const w = tableW + 2 * (seatW + TABLE_GAP) + 2 * SCENE_PAD;
+  const h = tableH + 2 * (seatH + TABLE_GAP) + 2 * SCENE_PAD;
+
+  const tx = SCENE_PAD + seatW + TABLE_GAP;
+  const ty = SCENE_PAD + seatH + TABLE_GAP;
+
+  const seats = [];
+  let idx = 0;
+
+  /* 下边：从左到右 */
+  for (let i = 0; i < b; i++) {
+    const cx = tx + ((i + 0.5) * tableW) / b;
+    seats.push({ idx: idx++, x: cx - seatW / 2, y: ty + tableH + TABLE_GAP });
+  }
+  /* 右边：从下到上 */
+  for (let i = 0; i < r; i++) {
+    const cy = ty + tableH - ((i + 0.5) * tableH) / r;
+    seats.push({ idx: idx++, x: tx + tableW + TABLE_GAP, y: cy - seatH / 2 });
+  }
+  /* 上边：从右到左 */
+  for (let i = 0; i < t; i++) {
+    const cx = tx + tableW - ((i + 0.5) * tableW) / t;
+    seats.push({ idx: idx++, x: cx - seatW / 2, y: ty - TABLE_GAP - seatH });
+  }
+  /* 左边：从上到下 */
+  for (let i = 0; i < l; i++) {
+    const cy = ty + ((i + 0.5) * tableH) / l;
+    seats.push({ idx: idx++, x: tx - TABLE_GAP - seatW, y: cy - seatH / 2 });
+  }
+
+  const decor = [];
+  const onlySides = t === 0 && b === 0 && l > 0 && r > 0;
+  const onlyTopBottom = l === 0 && r === 0 && t > 0 && b > 0;
+
+  if (onlySides || onlyTopBottom) {
+    /* 对坐：一张完整长桌，两边坐人 */
+    decor.push({ type: 'table', x: tx, y: ty, w: tableW, h: tableH, r: 10 });
+  } else {
+    if (b > 0) decor.push({ type: 'table', x: tx, y: ty + tableH - TABLE_T, w: tableW, h: TABLE_T, r: 8 });
+    if (t > 0) decor.push({ type: 'table', x: tx, y: ty, w: tableW, h: TABLE_T, r: 8 });
+    if (l > 0) decor.push({ type: 'table', x: tx, y: ty, w: TABLE_T, h: tableH, r: 8 });
+    if (r > 0) decor.push({ type: 'table', x: tx + tableW - TABLE_T, y: ty, w: TABLE_T, h: tableH, r: 8 });
+  }
+
+  return { w, h, seats, decor, table: { x: tx, y: ty, w: tableW, h: tableH } };
+}
+
+function sceneGeometry() {
+  const id = sceneId();
+  if (id === 'longTable') return longTableGeometry(sceneCfg(id));
+  return null;
 }
 
 
@@ -2119,8 +2474,48 @@ function buildRow(rowIndex) {
   return row;
 }
 
+/* ========== 场景图（长桌等绝对坐标场景） ========== */
+
+/**
+ * 把 scenes.js 算出的坐标铺成 DOM：桌板 + 绝对定位的座位。
+ * 座位仍用 buildSeat()，因此拖拽、编辑、无障碍全部复用。
+ */
+function renderScene(host) {
+  const geom = typeof sceneGeometry === 'function' ? sceneGeometry() : null;
+  host.classList.add('rows--scene');
+  if (!geom) {
+    host.replaceChildren();
+    return;
+  }
+  host.style.width = `${geom.w}px`;
+  host.style.height = `${geom.h}px`;
+
+  const scene = el('div', { class: 'scene', style: `width:${geom.w}px;height:${geom.h}px` });
+  geom.decor.forEach((d) => {
+    scene.appendChild(el('div', {
+      class: 'table-shape',
+      style: `left:${d.x}px;top:${d.y}px;width:${d.w}px;height:${d.h}px;border-radius:${d.r}px`
+    }));
+  });
+  geom.seats.forEach((pos) => {
+    const seat = buildSeat(pos.idx);
+    seat.classList.add('seat--abs');
+    seat.style.left = `${pos.x}px`;
+    seat.style.top = `${pos.y}px`;
+    scene.appendChild(seat);
+  });
+  host.replaceChildren(scene);
+}
+
 function renderRows() {
   const rows = $('rows');
+  if (sceneId() !== 'theater') {
+    renderScene(rows);
+    return;
+  }
+  rows.classList.remove('rows--scene');
+  rows.style.width = '';
+  rows.style.height = '';
   const frag = document.createDocumentFragment();
   for (let r = 0; r < S.layout.rows.length; r++) frag.appendChild(buildRow(r));
   rows.replaceChildren(frag);
@@ -2132,8 +2527,10 @@ function layoutAxis() {
   const rowsEl = $('rows');
   const stage = $('stage');
   const axis = $('axis');
-  /* 开关先于几何计算：隐藏时几何仍照常算，重新显示即可直接复用 */
-  if (axis) axis.style.display = S.showAxis === false ? 'none' : '';
+  /* 开关先于几何计算：隐藏时几何仍照常算，重新显示即可直接复用；
+     非剧院式场景没有中轴线，一并隐藏。 */
+  if (axis) axis.style.display = sceneId() !== 'theater' || S.showAxis === false ? 'none' : '';
+  if (sceneId() !== 'theater') return;
   const firstRow = rowsEl.querySelector('.row');
   if (!firstRow || !S.layout.rows.length) return;
 
@@ -2205,7 +2602,7 @@ function renderTitleBlock() {
   };
   setMeta('tbMeeting', S.meta.meeting);
   setMeta('tbDate', S.meta.date);
-  $('tbLayout').textContent = S.layout.rows.join(' + ');
+  $('tbLayout').textContent = sceneSummary();
 }
 
 function renderAbsent() {
@@ -2283,13 +2680,13 @@ function renderOrderTable() {
 
   const frag = document.createDocumentFragment();
 
-  for (let r = 0; r < S.layout.rows.length; r++) {
+  for (const group of sceneGroups()) {
     const head = el('tr', { class: 'is-row-head' });
-    head.appendChild(el('td', { colspan: '5', text: `第 ${r + 1} 排` }));
+    head.appendChild(el('td', { colspan: '5', text: group.label }));
     frag.appendChild(head);
 
-    const offset = rowStart(r);
-    for (let i = 0; i < S.layout.rows[r]; i++) {
+    const offset = group.start;
+    for (let i = 0; i < group.count; i++) {
       const idx = offset + i;
       const m = seatModel(idx, { forExport: true });
       const tr = el('tr', { dataset: { seatRow: String(idx) } });
@@ -2367,6 +2764,8 @@ function renderOrderTable() {
 function render() {
   applyTheme();
   syncSeatArrays();
+  const isTheater = sceneId() === 'theater';
+  $('stage').style.display = isTheater ? '' : 'none';
   renderRows();
   renderZoneStrip();
   renderAbsent();
@@ -2559,7 +2958,187 @@ function wrapByWidth(ctx, text, maxW, size, weight, family) {
   return lines;
 }
 
+/**
+ * 画一张座位卡：屏幕与 Canvas 共用同一份 seatModel，这里只负责落笔。
+ * 坐标系为画布逻辑像素，x/y 为卡片左上角。
+ */
+function paintSeatCard(ctx, m, x, y) {
+  const seatW = GEO.seatW;
+  const seatH = GEO.seatH;
+  const bg = m.zone ? m.zone.color : PALETTE.paperRaised;
+  const edge = m.zone ? darken(m.zone.color, 0.18) : PALETTE.ruleStrong;
+  const ink = m.zone ? m.ink : PALETTE.ink;
+
+  ctx.fillStyle = bg;
+  drawRoundRect(ctx, x, y, seatW, seatH, GEO.radius);
+  ctx.fill();
+  ctx.strokeStyle = edge;
+  ctx.lineWidth = 1;
+  if (m.isEmpty && !m.zone) ctx.setLineDash([3, 3]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  /* 座号 */
+  if (m.showNumber) {
+    ctx.fillStyle = m.zone ? ink : PALETTE.muted;
+    ctx.globalAlpha = m.zone ? 0.6 : 1;
+    ctx.font = `400 9px ${FONTS.mono}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(String(m.number), x + 5, y + 5);
+    ctx.globalAlpha = 1;
+  }
+
+  /* 无论是否画座号，正文一律回到居中基线 */
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  if (m.zone) {
+    /* 底部：姓名 + 单位（空位不画「（空）」，只留团色块） */
+    let cursorY = y + seatH - 6;
+    if (m.showNameRow) {
+      if (m.hasPerson) {
+        ctx.font = `600 ${m.nameSize}px ${FONTS.body}`;
+        ctx.fillStyle = ink;
+        ctx.fillText(m.person, x + seatW / 2, cursorY - m.nameSize / 2, seatW - 10);
+      }
+      cursorY -= m.nameSize + 2;
+    }
+    if (m.unitLines.length) {
+      const lineH = m.unitSize * 1.1;
+      ctx.font = `400 ${m.unitSize}px ${FONTS.body}`;
+      ctx.fillStyle = ink;
+      m.unitLines.forEach((line, li) => {
+        const ly = cursorY - (m.unitLines.length - li - 1) * lineH - lineH / 2;
+        ctx.fillText(line, x + seatW / 2, ly, seatW - 10);
+      });
+      cursorY -= m.unitLines.length * lineH + 2;
+    }
+
+    /* 团名：剩余空间居中 */
+    const areaTop = y + 8;
+    const areaH = Math.max(18, cursorY - areaTop);
+    const blockH = m.zoneLines.length * m.zoneSize * TYPE.lh;
+    ctx.fillStyle = ink;
+    ctx.font = `700 ${m.zoneSize}px ${FONTS.display}`;
+    m.zoneLines.forEach((line, li) => {
+      const ly = areaTop + (areaH - blockH) / 2 + li * m.zoneSize * TYPE.lh + m.zoneSize * TYPE.lh / 2;
+      ctx.fillText(line, x + seatW / 2, ly, seatW - 10);
+    });
+  } else {
+    /* 单位在上、姓名在下，与座位 DOM 顺序一致（单位常比姓名长，放上面不挤名字）。
+       空位不画「空位」二字：座位框与座号已足以表达，印面只留已填内容。 */
+    const lineH = m.unitSize * 1.1;
+    const unitH = m.unitLines.length ? m.unitLines.length * lineH : 0;
+    const nameH = m.hasPerson ? m.nameSize : 0;
+    const gapH = unitH && nameH ? 2 : 0;
+    const blockTop = y + (seatH - (unitH + gapH + nameH)) / 2;
+
+    if (unitH) {
+      ctx.fillStyle = PALETTE.muted;
+      ctx.font = `400 ${m.unitSize}px ${FONTS.body}`;
+      m.unitLines.forEach((line, li) => {
+        ctx.fillText(line, x + seatW / 2, blockTop + li * lineH + lineH / 2, seatW - 10);
+      });
+    }
+
+    if (m.hasPerson) {
+      ctx.fillStyle = PALETTE.ink;
+      ctx.font = `600 ${m.nameSize}px ${FONTS.body}`;
+      ctx.fillText(m.person, x + seatW / 2, blockTop + unitH + gapH + nameH / 2, seatW - 10);
+    }
+  }
+}
+
+/** 把画布存成 PNG（2 倍图已在 canvas 尺寸里体现）。 */
+function downloadCanvas(canvas, filename) {
+  canvas.toBlob((blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = el('a', { href: url, download: filename });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'image/png');
+}
+
+/**
+ * 绝对坐标场景（长桌等）的 PNG：同一份几何、同一套座位卡绘制。
+ */
+function exportScenePNG() {
+  const geom = sceneGeometry();
+  if (!geom) return;
+
+  const margin = 44;
+  const headerH = 96;
+  const totalW = geom.w + margin * 2;
+  const totalH = headerH + geom.h + 28;
+  const scale = 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = totalW * scale;
+  canvas.height = totalH * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+
+  ctx.fillStyle = PALETTE.paper;
+  ctx.fillRect(0, 0, totalW, totalH);
+  ctx.strokeStyle = PALETTE.rule;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(20.5, 20.5, totalW - 41, totalH - 41);
+
+  /* 刊头 */
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = PALETTE.ink;
+  ctx.font = `700 26px ${FONTS.display}`;
+  ctx.fillText('会务席位图', margin, 46);
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = `400 11px ${FONTS.mono}`;
+  ctx.fillText('SEATING PLAN', margin, 64);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = PALETTE.inkSoft;
+  ctx.font = `400 13px ${FONTS.display}`;
+  if (S.meta.meeting) ctx.fillText(S.meta.meeting, totalW - margin, 46);
+  ctx.fillStyle = PALETTE.muted;
+  ctx.font = `400 11px ${FONTS.mono}`;
+  if (S.meta.date) ctx.fillText(S.meta.date, totalW - margin, 64);
+
+  ctx.beginPath();
+  ctx.moveTo(margin, 78);
+  ctx.lineTo(totalW - margin, 78);
+  ctx.strokeStyle = PALETTE.ink;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  /* 图面 */
+  ctx.save();
+  ctx.translate(margin, headerH);
+
+  geom.decor.forEach((d) => {
+    ctx.fillStyle = PALETTE.paperRaised;
+    drawRoundRect(ctx, d.x, d.y, d.w, d.h, d.r);
+    ctx.fill();
+    ctx.strokeStyle = PALETTE.ruleStrong;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  geom.seats.forEach((pos) => {
+    paintSeatCard(ctx, seatModel(pos.idx, { forExport: true }), pos.x, pos.y);
+  });
+
+  ctx.restore();
+
+  downloadCanvas(canvas, `${SCENE_LABELS[sceneId()] || '席位'}席位图.png`);
+}
+
 function exportPNG() {
+  if (sceneId() !== 'theater') {
+    exportScenePNG();
+    return;
+  }
   const rows = S.layout.rows;
   const aisleCols = S.layout.aisles;
 
@@ -2698,90 +3277,7 @@ function exportPNG() {
       if (idx == null) continue;
       const x = startX + rowWidths[r].seatX(col);
 
-      const m = seatModel(idx, { forExport: true });
-      const bg = m.zone ? m.zone.color : PALETTE.paperRaised;
-      const edge = m.zone ? darken(m.zone.color, 0.18) : (m.isEmpty ? PALETTE.ruleStrong : PALETTE.ruleStrong);
-      const ink = m.zone ? m.ink : PALETTE.ink;
-
-      ctx.fillStyle = bg;
-      drawRoundRect(ctx, x, y, seatW, seatH, GEO.radius);
-      ctx.fill();
-      ctx.strokeStyle = edge;
-      ctx.lineWidth = 1;
-      if (m.isEmpty && !m.zone) ctx.setLineDash([3, 3]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      /* 座号 */
-      if (m.showNumber) {
-        ctx.fillStyle = m.zone ? ink : PALETTE.muted;
-        ctx.globalAlpha = m.zone ? 0.6 : 1;
-        ctx.font = `400 9px ${FONTS.mono}`;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.fillText(String(m.number), x + 5, y + 5);
-        ctx.globalAlpha = 1;
-      }
-
-      /* 无论是否画座号，正文一律回到居中基线 */
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-
-      if (m.zone) {
-        /* 底部：姓名 + 单位（空位不画「（空）」，只留团色块） */
-        let cursorY = y + seatH - 6;
-        if (m.showNameRow) {
-          if (m.hasPerson) {
-            ctx.font = `600 ${m.nameSize}px ${FONTS.body}`;
-            ctx.fillStyle = ink;
-            ctx.fillText(m.person, x + seatW / 2, cursorY - m.nameSize / 2, seatW - 10);
-          }
-          cursorY -= m.nameSize + 2;
-        }
-        if (m.unitLines.length) {
-          const lineH = m.unitSize * 1.1;
-          ctx.font = `400 ${m.unitSize}px ${FONTS.body}`;
-          ctx.fillStyle = ink;
-          m.unitLines.forEach((line, li) => {
-            const ly = cursorY - (m.unitLines.length - li - 1) * lineH - lineH / 2;
-            ctx.fillText(line, x + seatW / 2, ly, seatW - 10);
-          });
-          cursorY -= m.unitLines.length * lineH + 2;
-        }
-
-        /* 团名：剩余空间居中 */
-        const areaTop = y + 8;
-        const areaH = Math.max(18, cursorY - areaTop);
-        const blockH = m.zoneLines.length * m.zoneSize * TYPE.lh;
-        ctx.fillStyle = ink;
-        ctx.font = `700 ${m.zoneSize}px ${FONTS.display}`;
-        m.zoneLines.forEach((line, li) => {
-          const ly = areaTop + (areaH - blockH) / 2 + li * m.zoneSize * TYPE.lh + m.zoneSize * TYPE.lh / 2;
-          ctx.fillText(line, x + seatW / 2, ly, seatW - 10);
-        });
-      } else {
-        /* 单位在上、姓名在下，与座位 DOM 顺序一致（单位常比姓名长，放上面不挤名字）。
-           空位不画「空位」二字：座位框与座号已足以表达，印面只留已填内容。 */
-        const lineH = m.unitSize * 1.1;
-        const unitH = m.unitLines.length ? m.unitLines.length * lineH : 0;
-        const nameH = m.hasPerson ? m.nameSize : 0;
-        const gapH = unitH && nameH ? 2 : 0;
-        const blockTop = y + (seatH - (unitH + gapH + nameH)) / 2;
-
-        if (unitH) {
-          ctx.fillStyle = PALETTE.muted;
-          ctx.font = `400 ${m.unitSize}px ${FONTS.body}`;
-          m.unitLines.forEach((line, li) => {
-            ctx.fillText(line, x + seatW / 2, blockTop + li * lineH + lineH / 2, seatW - 10);
-          });
-        }
-
-        if (m.hasPerson) {
-          ctx.fillStyle = PALETTE.ink;
-          ctx.font = `600 ${m.nameSize}px ${FONTS.body}`;
-          ctx.fillText(m.person, x + seatW / 2, blockTop + unitH + gapH + nameH / 2, seatW - 10);
-        }
-      }
+      paintSeatCard(ctx, seatModel(idx, { forExport: true }), x, y);
     }
 
     globalOffset += n;
@@ -2810,14 +3306,7 @@ function exportPNG() {
     ctx.globalAlpha = 1;
   }
 
-  canvas.toBlob((blob) => {
-    const url = URL.createObjectURL(blob);
-    const a = el('a', { href: url, download: '座位图.png' });
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }, 'image/png');
+  downloadCanvas(canvas, '座位图.png');
 }
 
 
@@ -2846,6 +3335,8 @@ function collectState() {
     absent: Array.from(S.absent.entries()),
     zones: S.zones,
     layout: S.layout,
+    scene: sceneId(),
+    layouts: S.layouts,
     font: S.font,
     namesOnly: S.namesOnly,
     showNumbers: S.showNumbers,
@@ -2898,6 +3389,9 @@ function loadState() {
       S.absent = new Map(d.absent || []);
       S.zones = d.zones || [];
       S.layout = d.layout || { rows: [10, 10], aisles: [] };
+      S.scene = SCENE_IDS.includes(d.scene) ? d.scene : 'theater';
+      S.layouts = d.layouts || defaultLayouts();
+      S.layouts.theater = S.layout;
       S.font = d.font || { zone: 0, unit: 0, name: 0 };
       S.namesOnly = !!d.namesOnly;
       S.showNumbers = d.showNumbers !== false;
@@ -2916,6 +3410,9 @@ function loadState() {
       S.units = d.seatUnits || [];
       S.absent = new Map(d.absentSeats || []);
       S.zones = (d.zones || []).map((z) => ({ ...z, showName: z.showName !== undefined ? z.showName : true }));
+      S.scene = 'theater';
+      S.layouts = defaultLayouts();
+      S.layouts.theater = S.layout;
       S.font = {
         zone: d.zoneNameFontOffset || 0,
         unit: d.unitFontOffset || 0,
@@ -2951,6 +3448,54 @@ function syncInputs() {
   $('meetingDate').value = S.meta.date || '';
   $('stageLabel').value = S.meta.stage || '主  席  台';
   $('fontPreset').value = S.meta.fontPreset || 'gongwen';
+  syncSceneUI();
+}
+
+/** 场景切换栏 + 场景参数面板的显隐与回填。 */
+function syncSceneUI() {
+  const id = sceneId();
+  document.querySelectorAll('[data-scene]').forEach((btn) => {
+    const on = btn.dataset.scene === id;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const theaterPanel = $('theaterPanel');
+  const longPanel = $('longTablePanel');
+  if (theaterPanel) theaterPanel.hidden = id !== 'theater';
+  if (longPanel) longPanel.hidden = id !== 'longTable';
+  if (longPanel && id === 'longTable') {
+    const c = S.layouts.longTable;
+    $('ltTop').value = c.top;
+    $('ltBottom').value = c.bottom;
+    $('ltLeft').value = c.left;
+    $('ltRight').value = c.right;
+  }
+  const axisBtn = $('axisBtn');
+  if (axisBtn) axisBtn.hidden = id !== 'theater';
+}
+
+/** 切换场景：保留名单/单位/缺席/团体，按人重映射座位。 */
+function switchScene(next) {
+  if (!SCENE_IDS.includes(next) || next === sceneId()) return;
+  pushHistory();
+  if (App.zoneMode) toggleZoneMode(false);
+  S.scene = next;
+  const res = remapSeatsForScene(next);
+  syncInputs();
+  render();
+  scheduleSave();
+  notify(`已切换到「${SCENE_LABELS[next]}」${res.unseated ? `，${res.unseated} 人未排座` : ''}。`);
+}
+
+/** 修改长桌参数：人数变化同样重排，避免截断丢人。 */
+function setLongTable(patch) {
+  pushHistory();
+  Object.assign(S.layouts.longTable, patch);
+  const res = remapSeatsForScene('longTable');
+  syncInputs();
+  render();
+  scheduleSave();
+  if (res.unseated) notify(`座位不够，${res.unseated} 人未排座。`);
 }
 
 /* ========== 提示 ========== */
@@ -3191,21 +3736,20 @@ function downloadBlob(content, filename, type) {
 
 function exportCSV() {
   const lines = ['座位号,排,姓名,单位,状态,团体'];
-  for (let r = 0; r < S.layout.rows.length; r++) {
-    const offset = rowStart(r);
-    for (let i = 0; i < S.layout.rows[r]; i++) {
-      const idx = offset + i;
+  sceneGroups().forEach((group) => {
+    for (let i = 0; i < group.count; i++) {
+      const idx = group.start + i;
       const m = seatModel(idx);
       lines.push([
         m.number,
-        r + 1,
+        group.label,
         m.hasPerson ? m.person : '',
         m.unitLines.join(' / '),
         m.hasPerson ? '就座' : '空位',
         zoneNamesAt(idx).join('、')
       ].map(csvCell).join(','));
     }
-  }
+  });
   if (S.absent.size) {
     Array.from(S.absent.entries())
       .sort((a, b) => a[1] - b[1])
@@ -3221,11 +3765,10 @@ function buildOrderText() {
     return S.seats.filter((p) => p != null).map((p) => S.people[p]).join('\n');
   }
   const lines = [];
-  for (let r = 0; r < S.layout.rows.length; r++) {
-    const offset = rowStart(r);
-    lines.push(`【第 ${r + 1} 排】`);
-    for (let i = 0; i < S.layout.rows[r]; i++) {
-      const idx = offset + i;
+  sceneGroups().forEach((group) => {
+    lines.push(`【${group.label}】`);
+    for (let i = 0; i < group.count; i++) {
+      const idx = group.start + i;
       const m = seatModel(idx);
       const tails = [];
       if (m.unitLines.length) tails.push(`[${m.unitLines.join(' / ')}]`);
@@ -3234,7 +3777,7 @@ function buildOrderText() {
       lines.push(`${m.number}号\t${m.hasPerson ? m.person : '（空）'}${tails.length ? '\t' + tails.join('\t') : ''}`);
     }
     lines.push('');
-  }
+  });
   if (S.absent.size) {
     lines.push('【缺席】');
     Array.from(S.absent.entries())
@@ -3346,6 +3889,31 @@ function bindEvents() {
     render();
     scheduleSave();
     notify(S.showAxis ? '中轴线已显示。' : '中轴线已隐藏，导出 PNG 同步不显示。');
+  });
+
+  /* --- 场景切换与长桌参数 --- */
+  document.querySelectorAll('[data-scene]').forEach((btn) => {
+    btn.addEventListener('click', () => switchScene(btn.dataset.scene));
+  });
+  [['ltTop', 'top'], ['ltBottom', 'bottom'], ['ltLeft', 'left'], ['ltRight', 'right']].forEach(([id, key]) => {
+    const input = $(id);
+    if (!input) return;
+    input.addEventListener('change', () => {
+      const value = clamp(parseInt(input.value, 10) || 0, 0, 14);
+      input.value = value;
+      setLongTable({ [key]: value });
+    });
+  });
+  document.querySelectorAll('[data-lt-preset]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const presets = {
+        u: { top: 0, bottom: 8, left: 6, right: 6 },
+        face: { top: 0, bottom: 0, left: 8, right: 8 },
+        ring: { top: 6, bottom: 6, left: 6, right: 6 }
+      };
+      const preset = presets[btn.dataset.ltPreset];
+      if (preset) setLongTable(preset);
+    });
   });
 
   /* --- 字号 --- */
@@ -3509,8 +4077,9 @@ function bindSeatMapEvents() {
       return;
     }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
       const rowEl = seatEl.closest('.row');
+      if (!rowEl) return;
+      e.preventDefault();
       const rowIdx = Number(rowEl.dataset.row);
       const targetRow = rowsEl.querySelector(`.row[data-row="${rowIdx + (e.key === 'ArrowDown' ? 1 : -1)}"]`);
       if (!targetRow) return;
