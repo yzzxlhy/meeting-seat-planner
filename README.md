@@ -3,6 +3,8 @@
 **一个 HTML 文件就能用的排座工具。** 贴名单、拖座位、标团体，导出席位图或直接打印。
 零依赖、不联网、数据只留在本机浏览器。
 
+> 作者：宁波市第六医院 林恒屹
+
 ![单文件](https://img.shields.io/badge/single--file-HTML-9C3B2E)
 ![零依赖](https://img.shields.io/badge/dependencies-zero-2F5D7C)
 ![许可](https://img.shields.io/badge/license-MIT-3F6B4F)
@@ -153,7 +155,7 @@ CI 跑构建与交互 / 功能 / 迁移 / 字体 / 场景五项回归；版面�
 
 ## 许可
 
-[MIT](LICENSE)。可自由用于个人或单位内部办公，二次修改请保留版权声明。
+[MIT](LICENSE)。© 2026 宁波市第六医院 林恒屹。可自由用于个人或单位内部办公，二次修改请保留版权声明。
 
 ---
 
