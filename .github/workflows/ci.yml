@@ -18,6 +18,8 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          # 依赖清单叫 requirements-dev.txt，显式告诉缓存插件去哪找
+          cache-dependency-path: requirements-dev.txt
 
       - name: 安装中文字体（版式审计用）
         run: sudo apt-get update && sudo apt-get install -y fonts-noto-cjk
