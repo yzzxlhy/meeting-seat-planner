@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 安装中文字体（版式审计用）
+        run: sudo apt-get update && sudo apt-get install -y fonts-noto-cjk
+
+      - name: 安装测试依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: 安装 Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: 构建单文件产物
+        run: python build.py
+
+      - name: 主流程交互回归
+        run: python test_ui.py
+
+      - name: 功能清单回归
+        run: python test_features.py
+
+      - name: 旧版存档迁移
+        run: python test_migration.py
+
+      - name: 字体方案与 PNG 刊头
+        run: python test_fonts.py
+
+      - name: 上传失败截图
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: dist/shots/
+          if-no-files-found: ignore

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>会务席位图 · 排座工具</title>
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+
+<div class="sheet">
+
+  <!-- ================= 左栏：编制 ================= -->
+  <aside class="rail no-print">
+    <div class="masthead">
+      <h1>编制</h1>
+      <span class="sub">INPUT</span>
+    </div>
+
+    <section class="section">
+      <div class="section-head">
+        <span class="num">01</span>
+        <h2>规模与人员</h2>
+      </div>
+
+      <div class="field">
+        <label for="rowSeats">每排座位数</label>
+        <input id="rowSeats" type="text" inputmode="numeric" value="10,10" autocomplete="off">
+        <div class="field-note">逗号分隔，如 <code>10,10</code> 表示两排各 10 座。</div>
+      </div>
+
+      <div class="field">
+        <label for="aisles">过道位置</label>
+        <input id="aisles" type="text" inputmode="numeric" value="" autocomplete="off" placeholder="留空表示无过道">
+        <div class="field-note">按每排座位序号填写，如 <code>5</code> 表示第 5 座后有一条过道。</div>
+      </div>
+
+      <div class="field">
+        <label for="people">参会人员（每行一位）</label>
+        <textarea id="people" spellcheck="false">张三
+李四
+王五
+赵六
+钱七
+孙八</textarea>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn--primary" id="applyBtn" type="button">应用名单并排座</button>
+      </div>
+
+      <details class="field" style="margin-top:16px">
+        <summary style="cursor:pointer;font-size:11px;letter-spacing:.08em;color:var(--muted)">排座规则与操作说明</summary>
+        <div class="field-note" style="margin-top:8px;line-height:1.75">
+          <b>奇数座</b>：1 号居中，2 号在左，3 号在右，4 号在左二……<br>
+          <b>偶数座</b>：中轴落在 1、2 号之间，1 号在中轴右侧，2 号在左，3 号右一……<br>
+          <b>拖拽</b>：拖到座位上＝交换；拖到座位间麻线＝插入并顺位后移。<br>
+          <b>点击空位</b>：就地填名。点击有人座位：标记缺席。<br>
+          <b>座位左上 ✎</b>：有人座位就地改名；团体座位改团名。<br>
+          <b>点击单位</b>：多行编辑（Enter 换行，最多 3 行，Ctrl+Enter 保存）。<br>
+          <b>座位右上 ×</b>：清空该座位的姓名与单位。<br>
+          <b>键盘</b>：方向键移动焦点，Enter 编辑，Delete 清空。
+        </div>
+      </details>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <span class="num">02</span>
+        <h2>图面信息</h2>
+      </div>
+
+      <div class="field">
+        <label for="meetingName">会议名称</label>
+        <input id="meetingName" type="text" placeholder="（未填写）" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label for="meetingDate">日期</label>
+        <input id="meetingDate" type="text" placeholder="（未填写）" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label for="fontPreset">字体搭配</label>
+        <select id="fontPreset">
+          <option value="gongwen">公文 · 宋体标题 / 雅黑正文</option>
+          <option value="song">全宋 · 文书样式</option>
+          <option value="hei">黑体 · 现代会议</option>
+          <option value="kai">楷体 · 题签风格</option>
+        </select>
+        <div class="field-note">只换字族，不动版式；座位图与 PNG 导出同步生效。</div>
+      </div>
+
+      <div class="field" style="margin-bottom:0">
+        <label for="stageLabel">主席台文字</label>
+        <input id="stageLabel" type="text" value="主  席  台" autocomplete="off">
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <span class="num">03</span>
+        <h2>存档</h2>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="saveBtn" type="button">保存到本机</button>
+        <button class="btn btn--ghost" id="resetBtn" type="button">清空并存新样</button>
+      </div>
+      <div class="field-note" id="saveHint">数据仅保存在本浏览器，不上传。</div>
+    </section>
+  </aside>
+
+  <!-- ================= 右栏：图面 ================= -->
+  <main class="main">
+
+    <header class="masthead">
+      <h1>会务席位图</h1>
+      <span class="sub">SEATING PLAN · WORKBENCH</span>
+    </header>
+
+    <section class="section">
+      <div class="section-head">
+        <span class="num">04</span>
+        <h2>席位图</h2>
+        <span class="hint" id="seatHint">图面宽度随座位数自适应，窄屏可横向滚动</span>
+      </div>
+
+      <!-- 团体标注工具条 -->
+      <div class="zone-toolbar" id="zoneToolbar">
+        <div class="zfield">
+          <span class="zlabel">已选 <b id="zoneSelCount">0</b> 座</span>
+        </div>
+        <div class="zfield">
+          <span class="zlabel">团色</span>
+          <div class="color-pick" id="colorPick" role="group" aria-label="团体颜色"></div>
+        </div>
+        <div class="zfield">
+          <span class="zlabel">团体名称（Enter 换行，最多 3 行）</span>
+          <textarea id="zoneNameInput" placeholder="如：第一代表团"></textarea>
+        </div>
+        <label class="check" style="align-self:center">
+          <input type="checkbox" id="zoneShowName" checked> 座位内显示姓名
+        </label>
+        <div class="btn-row" style="align-self:center">
+          <button class="btn btn--primary" id="zoneConfirmBtn" type="button">完成</button>
+          <button class="btn btn--ghost" id="zoneCancelBtn" type="button">取消</button>
+        </div>
+      </div>
+
+      <div class="btn-row no-print" style="margin-bottom:10px">
+        <button class="btn" id="compactBtn" type="button">递补（消除空位）</button>
+        <button class="btn" id="undoBtn" type="button" disabled>撤销</button>
+        <button class="btn btn--accent" id="zoneBtn" type="button">标注团体区域</button>
+        <button class="btn" id="pngBtn" type="button">导出 PNG</button>
+        <button class="btn" id="printBtn" type="button">打印</button>
+        <button class="btn" id="numsBtn" type="button" aria-pressed="true" title="隐藏/显示座位左上角座号，导出 PNG 同步生效">隐藏座号</button>
+        <button class="btn" id="axisBtn" type="button" aria-pressed="true" title="隐藏/显示中轴线，导出 PNG 同步生效">隐藏中轴线</button>
+      </div>
+
+      <!-- 字号微调 -->
+      <div class="btn-row no-print" style="margin-bottom:14px;gap:14px">
+        <span style="font-size:11px;letter-spacing:.08em;color:var(--muted)">字号</span>
+        <span class="check" data-font-group="zone">
+          <span style="font-size:11px;color:var(--muted)">团名</span>
+          <button class="btn btn--ghost" data-font-step="-1" type="button" aria-label="团名减小">−</button>
+          <b data-font-value="zone" style="font-family:var(--font-mono);min-width:22px;text-align:center">0</b>
+          <button class="btn btn--ghost" data-font-step="1" type="button" aria-label="团名增大">＋</button>
+        </span>
+        <span class="check" data-font-group="unit">
+          <span style="font-size:11px;color:var(--muted)">单位</span>
+          <button class="btn btn--ghost" data-font-step="-1" type="button" aria-label="单位减小">−</button>
+          <b data-font-value="unit" style="font-family:var(--font-mono);min-width:22px;text-align:center">0</b>
+          <button class="btn btn--ghost" data-font-step="1" type="button" aria-label="单位增大">＋</button>
+        </span>
+        <span class="check" data-font-group="name">
+          <span style="font-size:11px;color:var(--muted)">姓名</span>
+          <button class="btn btn--ghost" data-font-step="-1" type="button" aria-label="姓名减小">−</button>
+          <b data-font-value="name" style="font-family:var(--font-mono);min-width:22px;text-align:center">0</b>
+          <button class="btn btn--ghost" data-font-step="1" type="button" aria-label="姓名增大">＋</button>
+        </span>
+        <button class="btn btn--ghost" id="fontResetBtn" type="button">重置</button>
+      </div>
+
+      <div class="zone-strip" id="zoneStrip"></div>
+
+      <div class="hall" id="hall">
+        <div class="hall-inner" id="hallInner">
+          <div class="axis" id="axis"></div>
+          <div class="stage" id="stage" contenteditable="false">主  席  台</div>
+          <div class="rows" id="rows"></div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span class="key"><span class="swatch"></span>有人</span>
+        <span class="key"><span class="swatch swatch--empty"></span>空位（点击填名）</span>
+        <span class="key"><span class="swatch swatch--zone"></span>团体席位</span>
+        <span class="key"><span class="swatch swatch--axis"></span>中轴线</span>
+      </div>
+
+      <div class="absent-panel" id="absentPanel"></div>
+
+      <div class="title-block" id="titleBlock">
+        <div class="cell">
+          <span class="k">会议名称</span>
+          <span class="v" id="tbMeeting" data-empty="true">（未填写）</span>
+        </div>
+        <div class="cell">
+          <span class="k">日期</span>
+          <span class="v" id="tbDate" data-empty="true">（未填写）</span>
+        </div>
+        <div class="cell">
+          <span class="k">席位构成</span>
+          <span class="v" id="tbLayout">—</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section no-print">
+      <div class="section-head">
+        <span class="num">05</span>
+        <h2>团体区域</h2>
+        <span class="hint">整块团色，可单独控制是否显示座位姓名</span>
+      </div>
+      <div class="zone-list" id="zoneList"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <span class="num">06</span>
+        <h2>座次表</h2>
+        <span class="hint" id="orderHint">按排次顺序</span>
+      </div>
+
+      <div class="btn-row no-print" style="margin-bottom:10px">
+        <button class="btn" id="csvBtn" type="button">导出 CSV</button>
+        <button class="btn" id="copyBtn" type="button">复制文本</button>
+        <button class="btn" id="txtBtn" type="button">下载 TXT</button>
+        <button class="btn btn--ghost" id="namesOnlyBtn" type="button">隐去其他内容</button>
+        <button class="btn btn--ghost" id="toPeopleBtn" type="button">写回参会人员</button>
+      </div>
+
+      <div class="order-wrap">
+        <table class="order-table" id="orderTable">
+          <thead>
+            <tr>
+              <th style="width:72px">席位</th>
+              <th>姓名</th>
+              <th class="col-meta" style="width:180px">单位</th>
+              <th class="col-meta" style="width:150px">团体</th>
+              <th class="col-meta actions" style="width:88px">操作</th>
+            </tr>
+          </thead>
+          <tbody id="orderBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div id="editorLayer"></div>
+
+<script>
+/*__JS__*/
+</script>
+</body>
+</html>

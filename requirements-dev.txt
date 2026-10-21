@@ -1,0 +1,2 @@
+# 仅测试需要；工具本身零依赖（单文件 HTML，不需要 Python 运行）
+playwright>=1.40
